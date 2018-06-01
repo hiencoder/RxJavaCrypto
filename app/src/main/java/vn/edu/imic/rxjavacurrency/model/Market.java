@@ -13,6 +13,8 @@ public class Market {
     @SerializedName("volume")
     private Double mVolume;
 
+    public String coinName;
+
     public String getMarket() {
         return mMarket;
     }
