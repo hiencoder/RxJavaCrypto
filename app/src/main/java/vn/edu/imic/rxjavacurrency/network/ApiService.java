@@ -14,7 +14,7 @@ public interface ApiService {
     * 1. Thêm RxJava vào trong Retrofit.Builder.
     * 2. Sử dụng Observable trong interface thay vì sử dụng Call.
     * @Path: truyen gia tri vao dau ngoac nhon. Ten cua param phai trung voi
-    * ten tron @GET*/
+    * ten trong @GET*/
     @GET("{coin}-usd")
     Observable<Crypto> getCurrency(@Path("coin") String coin);
 }

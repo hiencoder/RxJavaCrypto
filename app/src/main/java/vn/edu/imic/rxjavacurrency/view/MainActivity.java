@@ -9,7 +9,9 @@ import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.View;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,9 +22,12 @@ import butterknife.Unbinder;
 import io.reactivex.Observable;
 import io.reactivex.ObservableSource;
 import io.reactivex.Observer;
+import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Function;
 import io.reactivex.functions.Predicate;
+import io.reactivex.schedulers.Schedulers;
 import vn.edu.imic.rxjavacurrency.R;
 import vn.edu.imic.rxjavacurrency.adapter.CryptoAdapter;
 import vn.edu.imic.rxjavacurrency.model.Crypto;
@@ -56,13 +61,57 @@ public class MainActivity extends AppCompatActivity {
         /*Lấy ra mã bitcoin(btc)*/
         apiService = APIClient.getClient().create(ApiService.class);
         Observable<List<Market>> btcObservable = apiService.getCurrency("btc")
+                /*Chuyển đổi kết quả của map thành các luồng Observable*/
+                .map(result -> Observable.fromIterable(result.getTicker().getMarkets()))
+                /*FlatMap làm việc với từng phần tử, do đó chuyển đổi ArrayList thành
+                 * các phần tử đơn lẻ.*/
+                .flatMap(x -> x)
+                /*Filter để thay đổi các response*/
+                .filter(y -> {
+                    y.coinName = "btc";
+                    return true;
+                })
+                /*toList chuyển đổi kết quả của flatMap thành list*/
+                .toList()
+                /*toObservable chuyển dổi thành các luồng Observable*/
+                .toObservable();
+
+        Observable<List<Market>> ethObservable = APIClient.getClient().create(ApiService.class).getCurrency("eth")
                 .map(result -> Observable.fromIterable(result.getTicker().getMarkets()))
                 .flatMap(x -> x).filter(y -> {
-                    y.coinName = "btc";
+                    y.coinName = "eth";
                     return true;
                 }).toList().toObservable();
 
+        Observable.merge(btcObservable, ethObservable)
+                .subscribeOn(Schedulers.computation())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Observer<List<Market>>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        Log.d(TAG, "onSubscribe: ");
+                    }
+
+                    @Override
+                    public void onNext(List<Market> markets) {
+                        Log.d(TAG, "onNext: ");
+                        listMarket.addAll(markets);
+                        cryptoAdapter.notifyDataSetChanged();
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        Log.d(TAG, "onError: " + e.getMessage());
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        Log.d(TAG, "onComplete: ");
+                    }
+                });
+
         Observable<List<Market>> bitcObservable = apiService.getCurrency("btc")
+                /*Phát ra list market*/
                 .map(new Function<Crypto, List<Market>>() {
                     @Override
                     public List<Market> apply(Crypto crypto) throws Exception {
@@ -72,12 +121,7 @@ public class MainActivity extends AppCompatActivity {
                 .flatMap(new Function<List<Market>, ObservableSource<Market>>() {
                     @Override
                     public ObservableSource<Market> apply(List<Market> markets) throws Exception {
-                        return new Observable<Market>() {
-                            @Override
-                            protected void subscribeActual(Observer<? super Market> observer) {
-
-                            }
-                        };
+                        return Observable.fromArray(markets.toArray(new Market[markets.size()]));
                     }
                 })
                 .filter(new Predicate<Market>() {
@@ -98,6 +142,9 @@ public class MainActivity extends AppCompatActivity {
         rvCrypto.setAdapter(cryptoAdapter);
     }
 
+    /**
+     * @param view
+     */
     private void whiteNoticationBar(View view) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             int flags = view.getSystemUiVisibility();
@@ -107,8 +154,26 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     *
+     */
     private void configToolbar() {
+        setSupportActionBar(toolbar);
+        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+    }
 
+    /**
+     * @param markets
+     */
+    private void handleResult(List<Market> markets) {
+        listMarket.addAll(markets);
+        cryptoAdapter.notifyDataSetChanged();
+    }
+
+
+    private void handleError(Throwable t) {
+        Toast.makeText(this, "ERROR IN FETCHING API RESPONSE. Try again",
+                Toast.LENGTH_LONG).show();
     }
 
     @Override
